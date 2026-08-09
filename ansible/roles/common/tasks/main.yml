@@ -1,0 +1,46 @@
+---
+- name: Determine the admin group for this OS family
+  ansible.builtin.set_fact:
+    common_admin_group: "{{ 'wheel' if ansible_os_family == 'RedHat' else 'sudo' }}"
+
+- name: Create operator user
+  ansible.builtin.user:
+    name: "{{ node_user }}"
+    shell: "{{ node_user_shell }}"
+    groups: "{{ common_admin_group }}"
+    append: true
+    create_home: true
+    state: present
+
+- name: Passwordless sudo
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/91-{{ node_user }}"
+    content: "{{ node_user }} ALL=(ALL) NOPASSWD:ALL\n"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: "visudo -cf %s"
+
+- name: Ensure .ssh exists
+  ansible.builtin.file:
+    path: "/home/{{ node_user }}/.ssh"
+    state: directory
+    owner: "{{ node_user }}"
+    group: "{{ node_user }}"
+    mode: "0700"
+
+- name: Copy authorized_keys from the connecting account
+  ansible.builtin.copy:
+    src: "{{ ansible_env.HOME }}/.ssh/authorized_keys"
+    dest: "/home/{{ node_user }}/.ssh/authorized_keys"
+    remote_src: true
+    owner: "{{ node_user }}"
+    group: "{{ node_user }}"
+    mode: "0600"
+    force: false
+  when: ansible_user != node_user
+
+- name: Restore SELinux labels on the home directory
+  ansible.builtin.command: "restorecon -R /home/{{ node_user }}"
+  when: ansible_selinux.status is defined and ansible_selinux.status == 'enabled'
+  changed_when: false

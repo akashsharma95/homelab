@@ -1,0 +1,22 @@
+#!/bin/bash
+# Rebuild xt_statistic for the running kernel. Required after every kernel upgrade,
+# otherwise kube-proxy silently programs zero service rules on this node.
+set -euo pipefail
+
+KV=$(uname -r)
+cd /opt/xt_statistic
+
+if [ ! -d "/lib/modules/$KV/build" ]; then
+    echo "ERROR: no kernel headers for $KV. Install linux-headers-$KV first." >&2
+    exit 1
+fi
+
+make -C "/lib/modules/$KV/build" M=/opt/xt_statistic modules
+mkdir -p "/lib/modules/$KV/extra"
+cp xt_statistic.ko "/lib/modules/$KV/extra/"
+depmod -a
+modprobe xt_statistic
+
+echo "xt_statistic loaded for kernel $KV"
+echo "Now run: sudo systemctl restart k3s"
+echo "Verify:  sudo iptables-save -t nat | grep -c KUBE-SVC"

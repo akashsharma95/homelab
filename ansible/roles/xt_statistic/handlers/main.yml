@@ -1,0 +1,4 @@
+---
+- name: Run depmod
+  ansible.builtin.command: "depmod {{ ansible_kernel }}"
+  changed_when: true

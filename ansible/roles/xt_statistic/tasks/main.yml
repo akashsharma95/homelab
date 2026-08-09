@@ -1,0 +1,118 @@
+---
+# The Radxa A733 vendor kernel omits CONFIG_NETFILTER_XT_MATCH_STATISTIC, which
+# kube-proxy needs. Keyed on ansible_kernel so it re-runs after a kernel upgrade.
+# Background: docs/troubleshooting.md.
+
+- name: Check whether xt_statistic is already available
+  ansible.builtin.command: modinfo xt_statistic
+  register: xt_statistic_pre
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Build and install the module
+  when: xt_statistic_pre.rc != 0
+  block:
+
+    - name: Install build dependencies
+      ansible.builtin.apt:
+        name:
+          - build-essential
+          - "linux-headers-{{ ansible_kernel }}"
+        state: present
+        update_cache: true
+
+    - name: Verify kernel headers are usable
+      ansible.builtin.stat:
+        path: "/lib/modules/{{ ansible_kernel }}/build/Module.symvers"
+      register: xt_statistic_symvers
+
+    - name: Fail if the headers package is incomplete
+      ansible.builtin.fail:
+        msg: "/lib/modules/{{ ansible_kernel }}/build/Module.symvers missing"
+      when: not xt_statistic_symvers.stat.exists
+
+    - name: Create source directory
+      ansible.builtin.file:
+        path: /opt/xt_statistic
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Fetch xt_statistic.c from upstream
+      ansible.builtin.get_url:
+        url: >-
+          https://raw.githubusercontent.com/torvalds/linux/v{{
+          ansible_kernel.split('.')[0] }}.{{ ansible_kernel.split('.')[1] }}/net/netfilter/xt_statistic.c
+        dest: /opt/xt_statistic/xt_statistic.c
+        mode: "0644"
+
+    - name: Write module Makefile
+      ansible.builtin.copy:
+        dest: /opt/xt_statistic/Makefile
+        content: "obj-m += xt_statistic.o\n"
+        mode: "0644"
+
+    - name: Install rebuild helper
+      ansible.builtin.template:
+        src: rebuild.sh.j2
+        dest: /opt/xt_statistic/rebuild.sh
+        mode: "0755"
+
+    # Discard any .ko left from a previous kernel; its vermagic will not match.
+    - name: Remove stale build artifacts
+      ansible.builtin.file:
+        path: "/opt/xt_statistic/{{ item }}"
+        state: absent
+      loop:
+        - xt_statistic.ko
+        - xt_statistic.o
+        - xt_statistic.mod
+        - xt_statistic.mod.c
+        - xt_statistic.mod.o
+        - Module.symvers
+        - modules.order
+
+    - name: Build the module
+      ansible.builtin.command:
+        cmd: "make -C /lib/modules/{{ ansible_kernel }}/build M=/opt/xt_statistic modules"
+        chdir: /opt/xt_statistic
+      changed_when: true
+
+    - name: Ensure the kernel extra/ directory exists
+      ansible.builtin.file:
+        path: "/lib/modules/{{ ansible_kernel }}/extra"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install into the kernel extra/ directory
+      ansible.builtin.copy:
+        src: /opt/xt_statistic/xt_statistic.ko
+        dest: "/lib/modules/{{ ansible_kernel }}/extra/xt_statistic.ko"
+        remote_src: true
+        mode: "0644"
+      notify: Run depmod
+
+    - name: Flush handlers so depmod runs before modprobe
+      ansible.builtin.meta: flush_handlers
+
+    - name: Load the module
+      community.general.modprobe:
+        name: xt_statistic
+        state: present
+
+- name: Load xt_statistic at boot
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/xt_statistic.conf
+    content: "xt_statistic\n"
+    mode: "0644"
+
+- name: Verify the module is available
+  ansible.builtin.command: modinfo xt_statistic
+  register: xt_statistic_post
+  changed_when: false
+  check_mode: false
+  failed_when: xt_statistic_post.rc != 0

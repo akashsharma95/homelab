@@ -1,0 +1,98 @@
+---
+# Requires tailnet tagOwners and an OAuth client created beforehand.
+# An auth key cannot work here. See docs/decisions.md #7.
+
+- name: Require OAuth credentials
+  ansible.builtin.assert:
+    that:
+      - tailscale_oauth_client_id | length > 0
+      - tailscale_oauth_client_secret | length > 0
+    fail_msg: >-
+      Export TS_OAUTH_CLIENT_ID and TS_OAUTH_CLIENT_SECRET before enabling
+      tailscale_operator_enabled.
+
+- name: Install helm
+  ansible.builtin.shell: |
+    set -o pipefail
+    curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+  args:
+    executable: /bin/bash
+    creates: /usr/local/bin/helm
+
+- name: Create operator namespace
+  ansible.builtin.command: >-
+    /usr/local/bin/k3s kubectl create namespace {{ tailscale_operator_namespace }}
+    --dry-run=client -o yaml
+  register: tailscale_operator_ns_yaml
+  changed_when: false
+
+- name: Apply operator namespace
+  ansible.builtin.shell: |
+    set -o pipefail
+    echo '{{ tailscale_operator_ns_yaml.stdout }}' | /usr/local/bin/k3s kubectl apply -f -
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: Create the operator-oauth Secret
+  ansible.builtin.shell: |
+    set -o pipefail
+    /usr/local/bin/k3s kubectl create secret generic operator-oauth \
+      -n {{ tailscale_operator_namespace }} \
+      --from-literal=client_id='{{ tailscale_oauth_client_id }}' \
+      --from-literal=client_secret='{{ tailscale_oauth_client_secret }}' \
+      --dry-run=client -o yaml | /usr/local/bin/k3s kubectl apply -f -
+  args:
+    executable: /bin/bash
+  no_log: true
+  changed_when: true
+
+- name: Add the Tailscale helm repo
+  ansible.builtin.command: /usr/local/bin/helm repo add tailscale https://pkgs.tailscale.com/helmcharts
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  changed_when: false
+
+- name: Update helm repos
+  ansible.builtin.command: /usr/local/bin/helm repo update tailscale
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  changed_when: false
+
+- name: Install/upgrade the operator
+  ansible.builtin.command: >-
+    /usr/local/bin/helm upgrade --install tailscale-operator tailscale/tailscale-operator
+    --namespace {{ tailscale_operator_namespace }}
+    --version {{ tailscale_operator_chart_version }}
+    --set-string apiServerProxyConfig.mode="true"
+    --wait --timeout 10m
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  register: tailscale_operator_helm
+  changed_when: "'has been upgraded' in tailscale_operator_helm.stdout or 'has been installed' in tailscale_operator_helm.stdout"
+
+- name: Wait for the operator to become ready
+  ansible.builtin.command: >-
+    /usr/local/bin/k3s kubectl -n {{ tailscale_operator_namespace }}
+    rollout status deploy/operator --timeout=300s
+  changed_when: false
+
+- name: Confirm the operator registered a tailnet device
+  ansible.builtin.command: tailscale status
+  register: tailscale_operator_ts
+  changed_when: false
+  failed_when: false
+
+- name: Report tailnet registration
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'Operator registered in the tailnet.' if 'tailscale-operator' in tailscale_operator_ts.stdout
+         else 'Operator NOT yet in the tailnet — check it is not scheduled on a node
+               with broken service networking. See docs/troubleshooting.md.' }}
+
+- name: Reminder — RBAC is still required
+  ansible.builtin.debug:
+    msg: >-
+      The API server proxy authenticates your tailnet identity but grants nothing.
+      Bind it explicitly, e.g.
+      kubectl create clusterrolebinding tailscale-admin --clusterrole=cluster-admin --user='YOU@example.com'

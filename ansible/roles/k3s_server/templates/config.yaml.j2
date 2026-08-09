@@ -1,0 +1,19 @@
+# Managed by Ansible. Rendered from roles/k3s_server/templates/config.yaml.j2
+
+datastore-endpoint: "{{ k3s_datastore_endpoint }}"
+token: "{{ k3s_token }}"
+
+node-name: "{{ k3s_node_name | default(inventory_hostname) }}"
+node-ip: "{{ node_ip }}"
+node-external-ip: "{{ node_ip }}"
+
+flannel-iface: "{{ k3s_flannel_iface }}"
+cluster-cidr: "{{ k3s_cluster_cidr }}"
+service-cidr: "{{ k3s_service_cidr }}"
+
+tls-san:
+{% for san in k3s_tls_sans %}
+  - "{{ san }}"
+{% endfor %}
+
+write-kubeconfig-mode: "0644"

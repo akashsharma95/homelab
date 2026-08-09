@@ -1,0 +1,84 @@
+---
+- name: Ensure config directory exists
+  ansible.builtin.file:
+    path: /etc/rancher/k3s
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# 0600: contains the datastore password.
+- name: Write k3s server config
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: /etc/rancher/k3s/config.yaml
+    owner: root
+    group: root
+    mode: "0600"
+  notify: Restart k3s
+
+- name: Get installed k3s version
+  ansible.builtin.command: /usr/local/bin/k3s --version
+  register: k3s_server_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Download the k3s installer
+  ansible.builtin.get_url:
+    url: https://get.k3s.io
+    dest: /usr/local/share/k3s-install.sh
+    mode: "0755"
+  when: k3s_version not in (k3s_server_installed.stdout | default(''))
+
+- name: Install or upgrade k3s
+  ansible.builtin.command: /usr/local/share/k3s-install.sh
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
+    INSTALL_K3S_EXEC: "server"
+  when: k3s_version not in (k3s_server_installed.stdout | default(''))
+  changed_when: true
+
+- name: Enable and start k3s
+  ansible.builtin.systemd:
+    name: k3s
+    enabled: true
+    state: started
+    daemon_reload: true
+
+# Apply any config-triggered restart before verifying, not after.
+- name: Apply pending restarts
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for the API server to become ready
+  ansible.builtin.command: /usr/local/bin/k3s kubectl get --raw /readyz
+  register: k3s_server_readyz
+  until: k3s_server_readyz.rc == 0
+  retries: 30
+  delay: 10
+  changed_when: false
+  check_mode: false
+
+# A Ready node can still have zero service rules; see docs/troubleshooting.md.
+- name: Wait for kube-proxy to program service rules
+  ansible.builtin.shell: |
+    set -o pipefail
+    iptables-save -t nat 2>/dev/null | grep -c KUBE-SVC || true
+  args:
+    executable: /bin/bash
+  register: k3s_server_kube_svc
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  retries: 6
+  delay: 10
+  until: (k3s_server_kube_svc.stdout | trim | int) > 0
+
+- name: Assert this node has service rules
+  ansible.builtin.assert:
+    that: (k3s_server_kube_svc.stdout | trim | int) > 0
+    fail_msg: >-
+      kube-proxy programmed 0 KUBE-SVC rules on {{ inventory_hostname }}. ClusterIP and
+      cluster DNS will not work here, though pod-to-pod will appear healthy.
+      Check `journalctl -u k3s | grep -i proxier`. See docs/troubleshooting.md.
+    success_msg: "{{ inventory_hostname }}: {{ k3s_server_kube_svc.stdout | trim }} KUBE-SVC rules"

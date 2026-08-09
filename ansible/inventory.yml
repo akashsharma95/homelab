@@ -1,0 +1,36 @@
+# Groups select which prerequisite role a host gets; hardware, not OS alone.
+# Adding a node: put it in k3s_servers plus its hardware group, set node_ip, then
+#   ansible-playbook -i inventory.yml site.yml --limit <newnode>
+all:
+  vars:
+    ansible_user: ash
+    ansible_python_interpreter: auto_silent
+
+  children:
+    k3s_servers:
+      hosts:
+        ashx1:
+          node_ip: 100.86.153.102
+        ashx2:
+          node_ip: 100.108.19.113
+          # Oracle image hostname is "default".
+          k3s_node_name: ashx2
+        ashx3:
+          node_ip: 100.97.6.117
+
+    rpi:
+      hosts:
+        ashx3:
+
+    radxa_a733:
+      hosts:
+        ashx1:
+
+    almalinux:
+      hosts:
+        ashx2:
+
+    debian_family:
+      hosts:
+        ashx1:
+        ashx3:

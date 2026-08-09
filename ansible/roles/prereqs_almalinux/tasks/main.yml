@@ -1,0 +1,61 @@
+---
+- name: Import Tailscale repo GPG key
+  ansible.builtin.rpm_key:
+    key: https://pkgs.tailscale.com/stable/fedora/repo.gpg
+    state: present
+
+- name: Verify dnf metadata is healthy
+  ansible.builtin.command: dnf -q repolist
+  changed_when: false
+  check_mode: false
+
+- name: Install kernel-modules-extra for the running kernel
+  ansible.builtin.dnf:
+    name: "kernel-modules-extra-{{ ansible_kernel }}"
+    state: present
+  failed_when: false
+
+- name: Confirm xt_mark is available
+  ansible.builtin.command: modinfo xt_mark
+  register: prereqs_almalinux_xtmark
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+# Modules must match the running kernel exactly; a stale boot loses xt_mark.
+- name: Fail if xt_mark is unavailable
+  ansible.builtin.fail:
+    msg: >-
+      xt_mark unavailable on running kernel {{ ansible_kernel }}. Reboot into the newest
+      installed kernel. See docs/troubleshooting.md.
+  when: prereqs_almalinux_xtmark.rc != 0
+
+- name: Trust cluster CIDRs in firewalld
+  ansible.posix.firewalld:
+    source: "{{ item }}"
+    zone: trusted
+    permanent: true
+    immediate: true
+    state: enabled
+  loop:
+    - "{{ k3s_cluster_cidr }}"
+    - "{{ k3s_service_cidr }}"
+
+- name: Trust the tailnet interface in firewalld
+  ansible.posix.firewalld:
+    interface: "{{ k3s_flannel_iface }}"
+    zone: trusted
+    permanent: true
+    immediate: true
+    state: enabled
+
+# cni0/flannel.1 do not exist until k3s has run; permanent-only avoids needing them now.
+- name: Trust the CNI interfaces in firewalld
+  ansible.posix.firewalld:
+    interface: "{{ item }}"
+    zone: trusted
+    permanent: true
+    state: enabled
+  loop:
+    - cni0
+    - flannel.1

@@ -1,0 +1,41 @@
+---
+# An interrupted dpkg run blocks every later apt call with an opaque error.
+- name: Detect an interrupted dpkg run
+  ansible.builtin.find:
+    paths: /var/lib/dpkg/updates
+    file_type: file
+  register: prereqs_debian_dpkg_updates
+
+- name: Complete the interrupted dpkg run
+  ansible.builtin.command: dpkg --configure -a
+  when: prereqs_debian_dpkg_updates.matched > 0
+  changed_when: true
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name:
+      - curl
+      - iptables
+      - conntrack
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Check whether xt_statistic is available
+  ansible.builtin.command: modinfo xt_statistic
+  register: prereqs_debian_xtstat
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+# Without xt_statistic, iptables-restore fails as a whole transaction and kube-proxy
+# programs zero service rules. See docs/troubleshooting.md.
+- name: Fail if xt_statistic is missing and no workaround applies
+  ansible.builtin.fail:
+    msg: >-
+      xt_statistic unavailable and this host is not in the radxa_a733 group, so no
+      workaround will be applied. Service networking would be silently broken.
+      See docs/troubleshooting.md.
+  when:
+    - prereqs_debian_xtstat.rc != 0
+    - "'radxa_a733' not in group_names"

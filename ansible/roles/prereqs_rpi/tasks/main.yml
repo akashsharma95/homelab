@@ -1,0 +1,60 @@
+---
+- name: Locate cmdline.txt
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /boot/firmware/cmdline.txt
+    - /boot/cmdline.txt
+  register: prereqs_rpi_cmdline_candidates
+
+- name: Set cmdline.txt path
+  ansible.builtin.set_fact:
+    prereqs_rpi_cmdline: "{{ (prereqs_rpi_cmdline_candidates.results | selectattr('stat.exists') | first).stat.path }}"
+
+- name: Read current cmdline
+  ansible.builtin.slurp:
+    src: "{{ prereqs_rpi_cmdline }}"
+  register: prereqs_rpi_cmdline_content
+
+- name: Back up cmdline.txt before modifying
+  ansible.builtin.copy:
+    src: "{{ prereqs_rpi_cmdline }}"
+    dest: "{{ prereqs_rpi_cmdline }}.bak-{{ ansible_date_time.iso8601_basic_short }}"
+    remote_src: true
+    mode: "0755"
+  when: "'cgroup_enable=memory' not in (prereqs_rpi_cmdline_content.content | b64decode)"
+
+# Firmware injects cgroup_disable=memory; cmdline.txt is appended after, so this wins.
+# Rewritten whole rather than regexp-substituted, to guarantee it stays one line.
+- name: Append memory cgroup arguments
+  ansible.builtin.copy:
+    dest: "{{ prereqs_rpi_cmdline }}"
+    content: >-
+      {{ (prereqs_rpi_cmdline_content.content | b64decode).strip() }}
+      cgroup_enable=memory cgroup_memory=1
+    mode: "0755"
+  when: "'cgroup_enable=memory' not in (prereqs_rpi_cmdline_content.content | b64decode)"
+  register: prereqs_rpi_cmdline_changed
+
+- name: Reboot to apply the cgroup change
+  ansible.builtin.reboot:
+    reboot_timeout: 600
+  when:
+    - prereqs_rpi_cmdline_changed.changed
+    - allow_reboot | bool
+
+- name: Fail if a reboot is required but not permitted
+  ansible.builtin.fail:
+    msg: >-
+      {{ prereqs_rpi_cmdline }} updated but the memory cgroup needs a reboot to take
+      effect, and allow_reboot is false. Reboot {{ inventory_hostname }}, then re-run.
+  when:
+    - prereqs_rpi_cmdline_changed.changed
+    - not (allow_reboot | bool)
+
+- name: Verify the memory controller is active
+  ansible.builtin.command: cat /sys/fs/cgroup/cgroup.controllers
+  register: prereqs_rpi_controllers
+  changed_when: false
+  check_mode: false
+  failed_when: "'memory' not in prereqs_rpi_controllers.stdout"

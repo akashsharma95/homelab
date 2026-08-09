@@ -1,0 +1,50 @@
+# Comments must be on their own line — git does not support trailing comments,
+# and a pattern with one silently matches nothing.
+
+# --- secrets ---
+.env
+*.env
+secrets.yml
+vault-password*
+*vault-pass*
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+kubeconfig
+*kubeconfig*
+.kube/
+
+# --- terraform ---
+# tfvars hold the Neon password and OAuth secret.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
+# .terraform.lock.hcl is deliberately NOT ignored: committing it pins provider
+# versions and checksums so everyone resolves the same providers.
+
+# --- ansible ---
+*.retry
+.ansible/
+ansible/collections/
+inventory.local.yml
+host_vars/*.local.yml
+
+# --- python ---
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# --- editors / os ---
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
