@@ -45,13 +45,7 @@ resource "tailscale_acl" "this" {
       "tag:k8s"          = ["tag:k8s-operator"]
     }
 
-    acls = [
-      {
-        action = "accept"
-        src    = ["*"]
-        dst    = ["*:*"]
-      },
-    ]
+    acls = var.tailnet_acls
   })
 }
 

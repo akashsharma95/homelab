@@ -11,13 +11,28 @@
       Export TS_OAUTH_CLIENT_ID and TS_OAUTH_CLIENT_SECRET before enabling
       tailscale_operator_enabled.
 
-- name: Install helm
-  ansible.builtin.shell: |
-    set -o pipefail
-    curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-  args:
-    executable: /bin/bash
-    creates: /usr/local/bin/helm
+- name: Download helm
+  ansible.builtin.get_url:
+    url: "https://get.helm.sh/helm-{{ helm_version }}-linux-{{ helm_arch }}.tar.gz"
+    dest: "/tmp/helm-{{ helm_version }}-{{ helm_arch }}.tar.gz"
+    checksum: "sha256:https://get.helm.sh/helm-{{ helm_version }}-linux-{{ helm_arch }}.tar.gz.sha256sum"
+    mode: "0644"
+
+- name: Unpack helm
+  ansible.builtin.unarchive:
+    src: "/tmp/helm-{{ helm_version }}-{{ helm_arch }}.tar.gz"
+    dest: /tmp
+    remote_src: true
+    creates: "/tmp/linux-{{ helm_arch }}/helm"
+
+- name: Install the helm binary
+  ansible.builtin.copy:
+    src: "/tmp/linux-{{ helm_arch }}/helm"
+    dest: /usr/local/bin/helm
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
 
 - name: Create operator namespace
   ansible.builtin.command: >-

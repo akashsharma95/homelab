@@ -2,3 +2,14 @@
 tailnet           = "you@example.com"
 neon_project_name = "homelab-k3s"
 neon_region       = "aws-eu-west-2"
+
+# tailscale_acl REPLACES the whole policy file. Export your current rules from the
+# admin console and reproduce them here before applying; the example below is the
+# permissive personal-tailnet default and grants every device access to every other.
+tailnet_acls = [
+  {
+    action = "accept"
+    src    = ["*"]
+    dst    = ["*:*"]
+  },
+]

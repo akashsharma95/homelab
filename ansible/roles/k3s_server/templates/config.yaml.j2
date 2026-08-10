@@ -16,4 +16,5 @@ tls-san:
   - "{{ san }}"
 {% endfor %}
 
-write-kubeconfig-mode: "0644"
+# 0600: k3s.yaml holds cluster-admin client certificates.
+write-kubeconfig-mode: "0600"

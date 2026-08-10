@@ -23,6 +23,9 @@ node_user_shell: /bin/bash
 # Roles that need a reboot fail instead, unless this is set.
 allow_reboot: false
 
+helm_version: "v4.2.3"
+helm_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+
 tailscale_operator_enabled: false
 tailscale_operator_chart_version: "1.98.9"
 tailscale_operator_namespace: tailscale
