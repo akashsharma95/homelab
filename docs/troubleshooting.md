@@ -146,6 +146,20 @@ sudo dnf -q repolist        # all repos should list cleanly
 
 ---
 
+## ashx4: node goes NotReady 15 minutes after boot
+
+**Symptom.** Node joins, goes `Ready`, then `NodeStatusUnknown`. SSH and ARP dead on the
+LAN too, so it looks like a crash. No panic in the logs.
+
+**Cause.** Ubuntu's desktop image runs GDM. Its greeter's `gsd-power` suspends the machine
+after 900 s idle at the login screen. The previous boot's kernel log ends in
+`PM: suspend entry (s2idle)`.
+
+**Fix.** The `common` role masks `sleep`, `suspend`, `hibernate` and `hybrid-sleep`
+targets on every node. Verify: `systemctl is-enabled suspend.target` prints `masked`.
+
+---
+
 ## Tailscale operator pod runs but does nothing
 
 **Symptom.** Operator pod `Running`, no device appears in the tailnet, logs empty or

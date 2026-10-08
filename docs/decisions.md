@@ -73,6 +73,8 @@ servers is also the smallest etcd cluster that tolerates a failure.
 Keep the server count odd: a fourth member raises quorum to 3 without tolerating any more
 failures. Add servers in pairs, or add agents instead.
 
+**Update 2026-10:** ashx4 (Radxa Dragon Q6A) joined as the first agent, for this reason.
+
 ---
 
 ## 4. Which node was the first server

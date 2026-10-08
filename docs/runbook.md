@@ -11,7 +11,9 @@ ClusterIP from every node, 3 voting etcd members, API access over the tailnet).
 
 ## Add a new node
 
-The whole point of the Ansible layer. A new node becomes a full control-plane member.
+The whole point of the Ansible layer. A new node becomes a control-plane member
+(`k3s_servers`) or a worker (`k3s_agents`). Servers must stay odd in number, so add them in
+pairs; one extra machine should be an agent. See `docs/decisions.md` #3.
 
 **1. Prepare the machine**
 - Install a 64-bit OS and get it on the tailnet (`tailscale up`).
@@ -21,7 +23,7 @@ The whole point of the Ansible layer. A new node becomes a full control-plane me
 **2. Add it to `ansible/inventory.yml`**
 
 ```yaml
-k3s_servers:
+k3s_servers:        # or k3s_agents for a worker
   hosts:
     newnode:
       node_ip: 100.x.y.z
@@ -50,8 +52,20 @@ ansible-playbook -i inventory.yml site.yml --limit newnode --check --diff
 ansible-playbook -i inventory.yml site.yml --limit newnode
 ```
 
-On the very first run the operator account does not exist yet, so connect as the vendor
-account: `--limit newnode -u pi -k`. Subsequent runs use `ash`.
+On the very first run the operator account does not exist yet. Put your SSH key on the
+vendor account, then create `ash` with the `common` role alone:
+
+```bash
+ansible-playbook -i inventory.yml site.yml --limit newnode --tags common \
+  -e ansible_user=radxa -e ansible_become_password='...'
+```
+
+`-u` does not work here: inventory's `ansible_user` beats it. Limit to `common` because
+`-e ansible_user` also applies to tasks the agent role delegates to the first server.
+Subsequent runs use `ash`.
+
+Desktop OS images idle-suspend; the `common` role masks the sleep targets. See
+`docs/troubleshooting.md`.
 
 A Raspberry Pi needs a reboot for the memory cgroup. The play fails with an explicit
 message rather than continuing into a confusing kubelet failure; pass `-e allow_reboot=true`
@@ -75,7 +89,7 @@ with completely broken service networking.
 kubectl get nodes -o wide
 
 # Service rules on every node — the check that catches silent kube-proxy failure
-for n in ashx1 ashx2 ashx3; do
+for n in ashx1 ashx2 ashx3 ashx4; do
   echo -n "$n: "; ssh $n 'sudo iptables-save -t nat | grep -c KUBE-SVC'
 done
 
