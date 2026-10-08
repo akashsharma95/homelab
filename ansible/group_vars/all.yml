@@ -6,7 +6,7 @@ k3s_token: "{{ lookup('env', 'K3S_TOKEN') }}"
 # Must be identical on every server.
 k3s_cluster_cidr: "10.42.0.0/16"
 k3s_service_cidr: "10.43.0.0/16"
-k3s_version: "v1.36.3+k3s1"
+k3s_version: "v1.37.1+k3s1"
 k3s_flannel_iface: "tailscale0"
 
 # Derived from inventory so adding a node does not mean editing this too.
@@ -21,11 +21,11 @@ node_user_shell: /bin/bash
 # Roles that need a reboot fail instead, unless this is set.
 allow_reboot: false
 
-helm_version: "v4.2.3"
+helm_version: "v4.3.0"
 helm_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
 
 tailscale_operator_enabled: false
-tailscale_operator_chart_version: "1.98.9"
+tailscale_operator_chart_version: "1.102.4"
 tailscale_operator_namespace: tailscale
 tailscale_oauth_client_id: "{{ lookup('env', 'TS_OAUTH_CLIENT_ID') }}"
 tailscale_oauth_client_secret: "{{ lookup('env', 'TS_OAUTH_CLIENT_SECRET') }}"
