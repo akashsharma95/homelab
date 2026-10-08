@@ -51,3 +51,14 @@
   ansible.builtin.command: "restorecon -R /home/{{ node_user }}"
   when: ansible_selinux.status is defined and ansible_selinux.status == 'enabled'
   changed_when: false
+
+# Desktop images idle-suspend: Ubuntu's GDM greeter sleeps after 15 min, which drops the node.
+- name: Never suspend
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: true
+  loop:
+    - sleep.target
+    - suspend.target
+    - hibernate.target
+    - hybrid-sleep.target
