@@ -1,4 +1,4 @@
-# Tailscale tailnet policy and the Neon datastore. Node configuration lives in ../ansible.
+# Tailscale tailnet policy. Node configuration lives in ../ansible.
 #
 #   terraform init
 #   cp terraform.tfvars.example terraform.tfvars
@@ -10,11 +10,7 @@ terraform {
   required_providers {
     tailscale = {
       source  = "tailscale/tailscale"
-      version = "~> 0.17"
-    }
-    neon = {
-      source  = "kislerdm/neon"
-      version = "~> 0.6"
+      version = "~> 0.29"
     }
   }
 }
@@ -56,36 +52,3 @@ resource "tailscale_acl" "this" {
 #     Devices > Core     : Read+Write
 #     Keys > Auth Keys   : Read+Write
 # tagged tag:k8s-operator, then feed it to Ansible via TS_OAUTH_CLIENT_ID/SECRET.
-
-# ---------------------------------------------------------------------------------
-# Neon — the control-plane datastore
-# ---------------------------------------------------------------------------------
-
-provider "neon" {
-  # Set NEON_API_KEY.
-}
-
-resource "neon_project" "k3s" {
-  name      = var.neon_project_name
-  region_id = var.neon_region
-
-  # A k3s control plane writes continuously, so the compute never autosuspends.
-  # Keeping the minimum small limits how fast the free-tier compute budget burns.
-  # See "Known risks" in ../docs/decisions.md.
-  branch {
-    name          = "main"
-    database_name = "neondb"
-    role_name     = "neondb_owner"
-  }
-}
-
-output "datastore_endpoint_hint" {
-  description = <<-EOT
-    Build K3S_DATASTORE_ENDPOINT from the Neon connection string, with two edits:
-      1. use the DIRECT host, not the -pooler host
-      2. drop channel_binding — kine's lib/pq driver rejects it
-    Format: postgres://USER:PASS@HOST:5432/neondb?sslmode=require
-  EOT
-  value       = "postgres://<role>:<password>@${neon_project.k3s.database_host}/neondb?sslmode=require"
-  sensitive   = false
-}
