@@ -29,9 +29,16 @@
     group: "{{ node_user }}"
     mode: "0700"
 
+# ansible_env.HOME is root's under become, not the connecting account's.
+- name: Look up the connecting account's home
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ ansible_user }}"
+  when: ansible_user != node_user
+
 - name: Copy authorized_keys from the connecting account
   ansible.builtin.copy:
-    src: "{{ ansible_env.HOME }}/.ssh/authorized_keys"
+    src: "{{ ansible_facts.getent_passwd[ansible_user][4] }}/.ssh/authorized_keys"
     dest: "/home/{{ node_user }}/.ssh/authorized_keys"
     remote_src: true
     owner: "{{ node_user }}"
