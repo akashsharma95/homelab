@@ -7,7 +7,7 @@
     group: root
     mode: "0755"
 
-# 0600: contains the datastore password.
+# 0600: contains the cluster token.
 - name: Write k3s server config
   ansible.builtin.template:
     src: config.yaml.j2

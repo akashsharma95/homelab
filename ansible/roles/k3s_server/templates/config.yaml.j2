@@ -1,6 +1,10 @@
 # Managed by Ansible. Rendered from roles/k3s_server/templates/config.yaml.j2
 
-datastore-endpoint: "{{ k3s_datastore_endpoint }}"
+{% if inventory_hostname == groups['k3s_servers'][0] %}
+cluster-init: true
+{% else %}
+server: "https://{{ hostvars[groups['k3s_servers'][0]].node_ip }}:6443"
+{% endif %}
 token: "{{ k3s_token }}"
 
 node-name: "{{ k3s_node_name | default(inventory_hostname) }}"

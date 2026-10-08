@@ -4,20 +4,10 @@
   gather_facts: false
   run_once: true
   tasks:
-    - name: Datastore endpoint and token must be set
+    - name: Token must be set
       ansible.builtin.assert:
-        that:
-          - k3s_datastore_endpoint | length > 0
-          - k3s_token | length > 0
-        fail_msg: "Export K3S_DATASTORE_ENDPOINT and K3S_TOKEN. See group_vars/all.yml."
-
-    # kine's lib/pq rejects channel_binding; pooling adds risk for three clients.
-    - name: Datastore endpoint must not use Neon's pooler or channel_binding
-      ansible.builtin.assert:
-        that:
-          - "'-pooler' not in k3s_datastore_endpoint"
-          - "'channel_binding' not in k3s_datastore_endpoint"
-        fail_msg: "Use Neon's direct endpoint and drop channel_binding. docs/decisions.md #5."
+        that: k3s_token | length > 0
+        fail_msg: "Export K3S_TOKEN. See group_vars/all.yml."
 
     - name: Every server must define node_ip
       ansible.builtin.assert:

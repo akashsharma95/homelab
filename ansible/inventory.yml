@@ -8,13 +8,15 @@ all:
 
   children:
     k3s_servers:
+      # The first host initialises etcd; the rest join it. serial: 1 runs in this order.
+      # ashx2 first: see docs/decisions.md #4.
       hosts:
-        ashx1:
-          node_ip: 100.86.153.102
         ashx2:
           node_ip: 100.108.19.113
           # Oracle image hostname is "default".
           k3s_node_name: ashx2
+        ashx1:
+          node_ip: 100.86.153.102
         ashx3:
           node_ip: 100.97.6.117
 

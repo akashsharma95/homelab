@@ -1,8 +1,6 @@
 ---
 # Secrets come from the environment; nothing sensitive is committed.
-#   export K3S_DATASTORE_ENDPOINT='postgres://user:pass@host:5432/db?sslmode=require'
 #   export K3S_TOKEN='...'
-k3s_datastore_endpoint: "{{ lookup('env', 'K3S_DATASTORE_ENDPOINT') }}"
 k3s_token: "{{ lookup('env', 'K3S_TOKEN') }}"
 
 # Must be identical on every server.
