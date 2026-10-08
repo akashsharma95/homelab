@@ -35,10 +35,12 @@ debian_family:
 `k3s_tls_sans` derives from inventory, so there is nothing else to edit — but the other
 servers only pick up the new SAN on their next converge.
 
+Every server is also an etcd member, so keep the server count odd — see
+`docs/decisions.md` #3.
+
 **3. Converge**
 
 ```bash
-export K3S_DATASTORE_ENDPOINT='postgres://...'
 export K3S_TOKEN='...'
 cd ansible
 
@@ -81,8 +83,9 @@ done
 kubectl get nodes -o custom-columns=\
 'NODE:.metadata.name,FLANNEL-IP:.metadata.annotations.flannel\.alpha\.coreos\.com/public-ip'
 
-# Datastore reachable and in use
-psql "$K3S_DATASTORE_ENDPOINT" -tAc 'select count(*) from kine'
+# etcd: every node lists the etcd role, and the API server sees etcd as healthy
+kubectl get nodes          # ROLES: control-plane,etcd on all three
+ssh ashx2 'sudo k3s kubectl get --raw "/readyz?verbose"' | grep etcd
 ```
 
 Full functional test — deploy a DaemonSet and exercise both network layers. See
@@ -109,18 +112,48 @@ Background in `docs/troubleshooting.md`.
 
 ---
 
-## Rotate the datastore credentials
+## etcd snapshots and restore
 
-1. Change the password in the Neon console.
-2. Re-run with the new endpoint — the config file is rewritten and k3s restarted, one
-   node at a time (`serial: 1`), so the cluster stays up:
+k3s snapshots etcd at 00:00 and 12:00 and keeps 5 per server, on local disk
+(`/var/lib/rancher/k3s/server/db/snapshots`). Off-node copies are not configured.
 
 ```bash
-export K3S_DATASTORE_ENDPOINT='postgres://user:NEWPASS@host:5432/db?sslmode=require'
-ansible-playbook -i inventory.yml site.yml --tags k3s
+ssh ashx2 'sudo k3s etcd-snapshot ls'
+ssh ashx2 'sudo k3s etcd-snapshot save'      # on demand, e.g. before an upgrade
 ```
 
-Keep the direct endpoint and omit `channel_binding` — see `docs/decisions.md` #5.
+Restore (from the [k3s docs](https://docs.k3s.io/cli/etcd-snapshot)) — the whole cluster
+goes back to the snapshot:
+
+```bash
+for n in ashx1 ashx2 ashx3; do ssh $n 'sudo systemctl stop k3s'; done
+ssh ashx2 'sudo k3s server --cluster-reset --cluster-reset-restore-path=<SNAPSHOT>'
+ssh ashx2 'sudo systemctl start k3s'
+for n in ashx1 ashx3; do ssh $n 'sudo rm -rf /var/lib/rancher/k3s/server/db && sudo systemctl start k3s'; done
+```
+
+**Quorum lost and not coming back** (e.g. home is down for good): `--cluster-reset`
+*without* a restore path resets ashx2 to a single-member cluster with its current data.
+Start it normally afterwards, then rejoin the others as above.
+
+---
+
+## Replace a failed server
+
+The etcd member must be removed or new servers may fail to join. One node at a time, so
+the rest keep quorum (k3s
+[v1.22.7 release notes](https://github.com/k3s-io/k3s/releases/tag/v1.22.7%2Bk3s1)):
+
+```bash
+ssh <node> 'sudo systemctl stop k3s'       # if it still runs; otherwise it rejoins
+kubectl delete node <node>                 # k3s removes its etcd member
+ssh <node> 'sudo /usr/local/bin/k3s-uninstall.sh'
+ansible-playbook -i inventory.yml site.yml --limit <node>
+```
+
+Replacing **ashx2** itself: it is the first inventory host, so its config says
+`cluster-init`, and a fresh ashx2 would start a new, separate cluster. Move another server
+to the top of `k3s_servers` first, so ashx2 joins it instead.
 
 ---
 
@@ -181,20 +214,25 @@ generic line and `task-radxa-cubie-a7s` exists in the trixie repo.
 5. Verify service rules — with nftables mode, check `nft list ruleset | grep -c kube` rather
    than `iptables-save`.
 
-If the board misbehaves, swap the old card back. Nothing is lost: the cluster is HA on an
-external datastore, so ashx1 leaving and rejoining is routine.
+If the board misbehaves, swap the old card back. A fresh card is a new etcd member, so
+follow "Replace a failed server" — it does not simply rejoin.
 
 ---
 
 ## Emergency: cluster unreachable
 
 **Symptom: `kubectl` fails everywhere.**
-The datastore is the shared dependency. Check Neon first — including whether the free-tier
-compute budget is exhausted, which stops all three control planes at once.
+Likely lost etcd quorum: two of three servers are down or cannot reach each other. A home
+outage does exactly this. Check which servers are up and can reach each other over the
+tailnet:
 
 ```bash
-psql "$K3S_DATASTORE_ENDPOINT" -tAc 'select 1'
+for n in ashx1 ashx2 ashx3; do ssh $n 'systemctl is-active k3s; tailscale status | head -4'; done
+ssh ashx2 'sudo journalctl -u k3s -n 50 | grep -i etcd'
 ```
+
+Bringing the second member back restores quorum. If it cannot come back, see "etcd
+snapshots and restore".
 
 Running workloads keep serving traffic while the control plane is down. You lose the
 ability to schedule or change things, not the things already running.
@@ -225,8 +263,8 @@ ssh <node> 'sudo /usr/local/bin/k3s-uninstall.sh'          # server
 ssh <node> 'sudo /usr/local/bin/k3s-agent-uninstall.sh'    # agent, if any
 ```
 
-The Neon database retains cluster state. To start genuinely fresh, drop the `kine` table
-before rebuilding.
+Uninstall deletes `/var/lib/rancher/k3s`, including etcd data and local snapshots. Copy
+a snapshot off the node first if you want to keep the cluster state.
 
 ---
 

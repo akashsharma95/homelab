@@ -6,7 +6,7 @@ hardware changes.
 
 ---
 
-## 1. External Postgres datastore instead of embedded etcd
+## 1. External Postgres datastore instead of embedded etcd (superseded by #8)
 
 **Decision:** all three nodes are k3s servers pointing at an external Neon Postgres via
 `--datastore-endpoint`, using kine.
@@ -66,13 +66,12 @@ Tailscale address, confirming encapsulation rides the tailnet rather than the LA
 
 **Decision:** no dedicated agents.
 
-**Why.** With an external datastore there is no quorum to protect, so additional API
-servers are close to free — each one is another endpoint that can serve `kubectl` and
-another candidate for controller-manager leader election. With only three machines,
-dedicating any of them to agent-only duty would reduce availability for no benefit.
+**Why.** With only three machines, dedicating any of them to agent-only duty would
+reduce availability for no benefit. Since #8 every server is also an etcd member, so three
+servers is also the smallest etcd cluster that tolerates a failure.
 
-Note this differs from the etcd case, where an even number of members or too many voters
-is actively harmful.
+Keep the server count odd: a fourth member raises quorum to 3 without tolerating any more
+failures. Add servers in pairs, or add agents instead.
 
 ---
 
@@ -92,7 +91,7 @@ default kubeconfig context).
 
 ---
 
-## 5. Neon connection string: direct endpoint, no channel binding
+## 5. Neon connection string: direct endpoint, no channel binding (obsolete since #8)
 
 **Decision:** use Neon's **direct** endpoint and `sslmode=require` only.
 
@@ -106,14 +105,15 @@ Two modifications to the connection string Neon hands you:
 
 ---
 
-## 6. Datastore credentials in `config.yaml`, not the systemd unit
+## 6. Secrets in `config.yaml`, not the systemd unit
 
 **Decision:** all k3s flags live in `/etc/rancher/k3s/config.yaml`, mode **0600**,
 root-owned.
 
-**Why.** Passing `--datastore-endpoint` via `INSTALL_K3S_EXEC` bakes it into the systemd
-unit's `ExecStart`, making the Postgres password visible to any local user through
-`ps aux` or `systemctl cat`. A 0600 config file keeps it readable only by root.
+**Why.** Passing secrets via `INSTALL_K3S_EXEC` bakes them into the systemd unit's
+`ExecStart`, making them visible to any local user through `ps aux` or `systemctl cat`.
+This was decided for the Postgres password (#1); it applies equally to the cluster token.
+A 0600 config file keeps it readable only by root.
 
 ---
 
@@ -138,13 +138,34 @@ keeps the client secret out of Helm values, shell history and any CI log.
 
 ---
 
+## 8. Embedded etcd, after Neon became unavailable
+
+**Decision:** 3-member embedded etcd. ashx2 runs `cluster-init`, the others join it. The
+cluster was rebuilt from scratch on 2026-10-08.
+
+**Why.** Risk 1 below came true. On 2026-08-10 Neon began refusing new connections with
+`ERROR: Your project has exceeded the data transfer quota` (SQLSTATE 53000). ashx1 and
+ashx3 could not start; ashx2 kept serving on one long-lived connection until the rebuild.
+
+**No migration path.** k3s documents converting SQLite to etcd with `--cluster-init`, but
+not an external datastore. The only state worth keeping was the Tailscale operator's two
+secrets and one ClusterRoleBinding, which were backed up and restored by hand.
+
+**Accepted costs**, both argued in #1 and still true:
+
+- SD-card fsync latency and wear on ashx1 and ashx3. See risk 5.
+- 2 of 3 members are at home. A home outage takes the control plane down with it.
+
+**Revisit when:** ashx1 and ashx3 boot from USB3 SSDs, or a fourth site gives a quorum
+outside the home.
+
+---
+
 ## Known risks
 
-**1. Neon free-tier compute budget.** A k3s control plane writes continuously, so the
-Neon compute never autosuspends — roughly 730 hours/month of activity against a free-plan
-budget of ~192 CU-hours. At the 0.25 CU minimum this lands right at the edge; any
-autoscaling above that exceeds it. **If the quota is exhausted, all three control planes
-stop**, because the datastore is a shared hard dependency. Watch the Neon usage dashboard.
+**1. Neon free-tier quota — happened, resolved by #8.** The quota that ran out was data
+transfer, not the compute budget this risk predicted. All three control planes stopped,
+as predicted.
 
 **2. ashx1 kernel netfilter gap.** The Radxa vendor kernel omits
 `CONFIG_NETFILTER_XT_MATCH_STATISTIC`, without which kube-proxy programs *zero* service
@@ -157,3 +178,8 @@ Running the control plane raises its baseline utilisation, which helps.
 
 **4. ashx1 runs Debian 11, which is EOL.** Upgrade path researched — see
 `docs/runbook.md`. It is not an in-place upgrade.
+
+**5. etcd on SD cards.** ashx3's card failed etcd's fsync benchmark in #1 and ashx1 is
+marginal. Expect slow-disk warnings in `journalctl -u k3s`, possible leader churn, and
+card wear. A dead card loses one member, not the cluster; replace it as in
+`docs/runbook.md` "Replace a failed server".

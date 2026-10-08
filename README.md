@@ -1,8 +1,7 @@
 # homelab
 
 A three-node Kubernetes (k3s) cluster stretched across a home lab and Oracle Cloud,
-joined over a Tailscale tailnet, with an external Postgres control-plane datastore so
-that losing any single site does not take the cluster with it.
+joined over a Tailscale tailnet, with embedded etcd as the control-plane datastore.
 
 This repo is both the **documentation** of that cluster and the **automation** to rebuild
 it or add a node to it.
@@ -18,37 +17,30 @@ it or add a node to it.
 | `docs/runbook.md` | Operational procedures — add a node, rotate secrets, kernel upgrades |
 | `docs/troubleshooting.md` | Real failures hit in this cluster and how they were diagnosed |
 | `ansible/` | Node provisioning (the actual automation) |
-| `terraform/` | Tailscale tailnet + Neon datastore resources |
+| `terraform/` | Tailscale tailnet policy |
 
 ---
 
 ## Architecture at a glance
 
 ```
-                        ┌──────────────────────────────┐
-                        │   Neon Postgres (eu-west-2)  │
-                        │   external control-plane     │
-                        │   datastore, via kine        │
-                        └───────────▲──────────────────┘
-                                    │ TLS (sslmode=require)
-                 ┌──────────────────┼──────────────────┐
-                 │                  │                  │
-        ┌────────┴───────┐ ┌────────┴───────┐ ┌────────┴───────┐
+        ┌────────────────┐ ┌────────────────┐ ┌────────────────┐
         │     ashx1      │ │     ashx2      │ │     ashx3      │
         │  Radxa Cubie   │ │  Oracle Cloud  │ │ Raspberry Pi 4 │
         │     A7S        │ │   Ampere A1    │ │                │
         │ control-plane  │ │ control-plane  │ │ control-plane  │
+        │ + etcd member  │ │ + etcd (init)  │ │ + etcd member  │
         │ 100.86.153.102 │ │ 100.108.19.113 │ │  100.97.6.117  │
         └────────┬───────┘ └────────┬───────┘ └────────┬───────┘
                  │                  │                  │
                  └──────────────────┴──────────────────┘
-                    flannel VXLAN over tailscale0
+                    flannel VXLAN + etcd peers over tailscale0
                     pods 10.42.0.0/16 · svc 10.43.0.0/16
 ```
 
 **Every node is a control-plane node.** There are no dedicated agents. All three run an
-API server, scheduler and controller-manager against the shared Neon datastore, and all
-three also run workloads.
+API server, scheduler, controller-manager and an etcd member, and all three also run
+workloads.
 
 ### Node inventory
 
@@ -64,20 +56,19 @@ three also run workloads.
 | Location | Home (UK) | uk-london-1 | Home (UK) |
 | Login | `ash` (orig. `radxa`) | `ash` (orig. `opc`) | `ash` |
 
-Latency: ashx1↔ashx3 ~1.5 ms (same LAN), home↔ashx2 ~21 ms, ashx2→Neon ~4 ms,
-home→Neon ~25-30 ms.
+Latency: ashx1↔ashx3 ~1.5 ms (same LAN), home↔ashx2 ~21 ms.
 
 ### Software
 
 | Component | Version / choice |
 |---|---|
-| Kubernetes | k3s v1.36.3+k3s1 |
-| Datastore | Neon Postgres 18.4 (external, via kine) |
+| Kubernetes | k3s v1.37.1+k3s1 |
+| Datastore | embedded etcd, 3 members |
 | CNI | flannel, VXLAN backend, bound to `tailscale0` |
 | Ingress | Traefik (k3s default) |
 | Storage | local-path provisioner |
-| Overlay network | Tailscale 1.98.10 (node-level) |
-| Tailnet integration | Tailscale Kubernetes operator 1.98.9 |
+| Overlay network | Tailscale 1.104.1 (node-level) |
+| Tailnet integration | Tailscale Kubernetes operator 1.102.4 |
 
 ---
 
@@ -101,24 +92,23 @@ k3s manage `tailscaled` and advertise the pod CIDR as a tailnet route, which req
 `autoApprovers` route approval and ACL edits in the Tailscale admin console.
 `--flannel-iface` achieves the same reachability with no tailnet policy changes.
 
-### Control plane: external datastore, not etcd
+### Control plane: embedded etcd
 
-k3s normally uses SQLite (single server) or embedded etcd (HA). We use neither — all
-three servers point at an external Neon Postgres instance through kine, k3s's datastore
-shim.
-
-The reason is measured, not aesthetic: **both home nodes boot from SD cards**, and etcd's
-own fsync benchmark disqualified them. See `docs/decisions.md` for the numbers.
+Each server runs an etcd member. ashx2 initialises the cluster (`cluster-init`); ashx1
+and ashx3 join it. Until 2026-10 the datastore was an external Neon Postgres via kine;
+it was replaced after Neon's free-tier transfer quota cut off all new connections. See
+`docs/decisions.md` #8.
 
 Consequences you must understand:
 
-- **Any single node can fail and the cluster keeps working.** Oracle outage → the two
-  home nodes serve the API. Home outage → ashx2 serves the API. This symmetry is the
-  whole point, and it is better than a 3-member etcd would have given us, because that
-  would have put 2 of 3 voters at home.
-- **Neon is a hard dependency for all three nodes.** If the datastore is unavailable, the
-  entire control plane is down everywhere. Running workloads keep serving traffic; you
-  just cannot schedule or change anything.
+- **Quorum is 2 of 3.** Any one node can fail and the cluster keeps working.
+- **Two of the three members are at home.** A home outage leaves ashx2 alone, without
+  quorum: the API stops everywhere. An Oracle outage is survivable. The old external
+  datastore survived both; this is the accepted cost of dropping it.
+- **etcd fsyncs continuously to SD cards** on ashx1 and ashx3. That is slow (ashx3 failed
+  etcd's fsync benchmark) and wears the cards. See `docs/decisions.md` known risks.
+- Running workloads keep serving traffic without quorum; you just cannot schedule or
+  change anything.
 
 ### Tailnet integration
 
@@ -167,10 +157,9 @@ RBAC binding in the cluster or every request returns `Forbidden`.
 ```bash
 # 1. Install tooling
 brew install ansible          # required
-brew install terraform        # optional, only for tailnet/Neon resources
+brew install terraform        # optional, only for the tailnet policy
 
 # 2. Provide secrets (never committed — see ansible/group_vars/all.yml)
-export K3S_DATASTORE_ENDPOINT='postgres://USER:PASS@HOST:5432/DB?sslmode=require'
 export K3S_TOKEN='...'
 
 # 3. Converge the whole cluster (idempotent)
@@ -187,7 +176,7 @@ See `docs/runbook.md` for the full procedure including per-hardware prerequisite
 
 ## Repo conventions
 
-- **No secrets in git.** The datastore URL, k3s token and OAuth credentials come from
+- **No secrets in git.** The k3s token and OAuth credentials come from
   environment variables or Ansible Vault. `.gitignore` blocks the usual accidents.
 - **Idempotent.** `site.yml` is safe to re-run at any time; it is the mechanism for both
   initial build and ongoing convergence.
