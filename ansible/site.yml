@@ -1,6 +1,6 @@
 ---
 - name: Preflight
-  hosts: k3s_servers
+  hosts: k3s_servers:k3s_agents
   gather_facts: false
   run_once: true
   tasks:
@@ -13,17 +13,17 @@
       ansible.builtin.assert:
         that: hostvars[item].node_ip is defined
         fail_msg: "{{ item }} has no node_ip; TLS SANs and node addressing derive from it."
-      loop: "{{ groups['k3s_servers'] }}"
+      loop: "{{ groups['k3s_servers'] + groups['k3s_agents'] }}"
 
 - name: Base node configuration
-  hosts: k3s_servers
+  hosts: k3s_servers:k3s_agents
   become: true
   roles:
     - role: common
       tags: [common]
 
 - name: Hardware and OS prerequisites
-  hosts: k3s_servers
+  hosts: k3s_servers:k3s_agents
   become: true
   roles:
     - role: prereqs_rpi
@@ -45,6 +45,13 @@
   serial: 1
   roles:
     - role: k3s_server
+      tags: [k3s]
+
+- name: K3s agents
+  hosts: k3s_agents
+  become: true
+  roles:
+    - role: k3s_agent
       tags: [k3s]
 
 - name: Tailscale Kubernetes operator

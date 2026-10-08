@@ -1,5 +1,5 @@
 # Groups select which prerequisite role a host gets; hardware, not OS alone.
-# Adding a node: put it in k3s_servers plus its hardware group, set node_ip, then
+# Adding a node: put it in k3s_servers or k3s_agents plus its hardware group, set node_ip, then
 #   ansible-playbook -i inventory.yml site.yml --limit <newnode>
 all:
   vars:
@@ -20,6 +20,12 @@ all:
         ashx3:
           node_ip: 100.97.6.117
 
+    # Workers only: no etcd member, so they do not change quorum. See docs/decisions.md #3.
+    k3s_agents:
+      hosts:
+        ashx4:
+          node_ip: 100.76.119.113
+
     rpi:
       hosts:
         ashx3:
@@ -36,3 +42,4 @@ all:
       hosts:
         ashx1:
         ashx3:
+        ashx4:

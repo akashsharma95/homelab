@@ -1,0 +1,11 @@
+# Managed by Ansible. Rendered from roles/k3s_agent/templates/config.yaml.j2
+
+# One server is enough to register; the agent's load balancer then learns the rest.
+server: "https://{{ hostvars[groups['k3s_servers'][0]].node_ip }}:6443"
+token: "{{ k3s_token }}"
+
+node-name: "{{ k3s_node_name | default(inventory_hostname) }}"
+node-ip: "{{ node_ip }}"
+node-external-ip: "{{ node_ip }}"
+
+flannel-iface: "{{ k3s_flannel_iface }}"
