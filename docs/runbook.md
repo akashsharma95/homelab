@@ -2,10 +2,10 @@
 
 Operational procedures.
 
-**Status:** applied to all three nodes on 2026-08-09 and converged — a second run reports
+**Status:** rebuilt on embedded etcd on 2026-10-08 and converged — a second run reports
 `changed=0` everywhere. Validated with `ansible-lint` at the production profile,
-`--syntax-check`, and a post-apply functional test (9/9 pod-to-pod mesh, plus DNS,
-ClusterIP and authenticated API access from every node).
+`--syntax-check`, and a post-apply functional test (9/9 pod-to-pod mesh, plus DNS and
+ClusterIP from every node, 3 voting etcd members, API access over the tailnet).
 
 ---
 

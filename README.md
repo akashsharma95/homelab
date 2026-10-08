@@ -49,7 +49,7 @@ workloads.
 | Hardware | Radxa Cubie A7S | Oracle Ampere A1.Flex | Raspberry Pi 4B |
 | SoC / arch | Allwinner A733, arm64 | Ampere, arm64 | BCM2711, arm64 |
 | OS | Debian 11 (bullseye) | AlmaLinux 10.2 | Debian 13 (trixie) |
-| Kernel | 5.15.147-21-a733 (vendor) | 6.12.0-211.40.1.el10_2 | 6.18.38-v8+ |
+| Kernel | 5.15.147-21-a733 (vendor) | 6.12.0-211.61.1.el10_2 | 6.18.50+rpt-rpi-v8 |
 | CPU / RAM | 8 cores / 8 GB | 4 OCPU / 24 GB | 4 cores / 8 GB |
 | Storage | 238 GB SD card | 46 GB boot + 147 GB volume | 58 GB SD card |
 | Tailnet IP | 100.86.153.102 | 100.108.19.113 | 100.97.6.117 |
