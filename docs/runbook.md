@@ -17,6 +17,8 @@ pairs; one extra machine should be an agent. See `docs/decisions.md` #3.
 
 **1. Prepare the machine**
 - Install a 64-bit OS and get it on the tailnet (`tailscale up`).
+- Enable Tailscale SSH: `sudo tailscale set --ssh`. Run it on the console or over the
+  LAN, because it hangs any SSH session open to the node's `100.x` address.
 - Note its `100.x` address: `tailscale ip -4`.
 - Ensure you can SSH in as some account with sudo.
 
