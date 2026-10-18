@@ -42,6 +42,15 @@ resource "tailscale_acl" "this" {
     }
 
     acls = var.tailnet_acls
+
+    # Tailscale's default rule, restated: omitting it here would disable Tailscale SSH on
+    # apply. Covers the nodes because they are owned by the user, not tagged.
+    ssh = [{
+      action = "check"
+      src    = ["autogroup:member"]
+      dst    = ["autogroup:self"]
+      users  = ["autogroup:nonroot", "root"]
+    }]
   })
 }
 
