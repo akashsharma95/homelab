@@ -36,6 +36,11 @@ all:
       hosts:
         ashx1:
 
+    radxa_q6a:
+      hosts:
+        ashx4:
+        ashx5:
+
     almalinux:
       hosts:
         ashx2:

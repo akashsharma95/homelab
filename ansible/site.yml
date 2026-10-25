@@ -38,6 +38,9 @@
     - role: xt_statistic
       when: "'radxa_a733' in group_names"
       tags: [prereqs, xt_statistic]
+    - role: prereqs_q6a
+      when: "'radxa_q6a' in group_names"
+      tags: [prereqs]
 
 - name: K3s control plane
   hosts: k3s_servers

@@ -1,0 +1,52 @@
+---
+# The kernel refuses to enable the cpu controller while any real-time thread sits in a
+# child cgroup, and kubelet cannot start without it. The GDM greeter's pipewire and
+# gnome-shell hold such threads. rt_group_sched=0 lifts the restriction and keeps the GUI.
+# See docs/troubleshooting.md.
+- name: Read current kernel cmdline
+  ansible.builtin.slurp:
+    src: /etc/kernel/cmdline
+  register: prereqs_q6a_cmdline
+
+- name: Back up /etc/kernel/cmdline before modifying
+  ansible.builtin.copy:
+    src: /etc/kernel/cmdline
+    dest: "/etc/kernel/cmdline.bak-{{ ansible_date_time.iso8601_basic_short }}"
+    remote_src: true
+    mode: "0644"
+  when: "'rt_group_sched=0' not in (prereqs_q6a_cmdline.content | b64decode)"
+
+- name: Disable RT group scheduling
+  ansible.builtin.copy:
+    dest: /etc/kernel/cmdline
+    content: "{{ (prereqs_q6a_cmdline.content | b64decode).strip() }} rt_group_sched=0\n"
+    mode: "0644"
+  when: "'rt_group_sched=0' not in (prereqs_q6a_cmdline.content | b64decode)"
+  register: prereqs_q6a_cmdline_changed
+  notify: Regenerate boot entries
+
+- name: Flush handlers so boot entries are regenerated before the reboot
+  ansible.builtin.meta: flush_handlers
+
+- name: Reboot to apply the cmdline change
+  ansible.builtin.reboot:
+    reboot_timeout: 600
+  when:
+    - prereqs_q6a_cmdline_changed.changed
+    - allow_reboot | bool
+
+- name: Fail if a reboot is required but not permitted
+  ansible.builtin.fail:
+    msg: >-
+      /etc/kernel/cmdline updated but rt_group_sched=0 needs a reboot to take effect,
+      and allow_reboot is false. Reboot {{ inventory_hostname }}, then re-run.
+  when:
+    - prereqs_q6a_cmdline_changed.changed
+    - not (allow_reboot | bool)
+
+- name: Verify RT group scheduling is off
+  ansible.builtin.command: cat /proc/cmdline
+  register: prereqs_q6a_proc_cmdline
+  changed_when: false
+  check_mode: false
+  failed_when: "'rt_group_sched=0' not in prereqs_q6a_proc_cmdline.stdout"

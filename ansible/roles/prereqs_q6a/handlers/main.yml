@@ -1,0 +1,8 @@
+---
+# Both boot paths read /etc/kernel/cmdline: extlinux via u-boot-update, EFI via kernel-install.
+- name: Regenerate boot entries
+  ansible.builtin.command: "{{ item }}"
+  loop:
+    - u-boot-update
+    - "kernel-install add {{ ansible_kernel }} /boot/vmlinuz-{{ ansible_kernel }}"
+  changed_when: true
