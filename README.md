@@ -79,6 +79,7 @@ Latency: ashx1↔ashx3 ~1.5 ms (same LAN), home↔ashx2 ~21 ms.
 | Storage | local-path provisioner |
 | Overlay network | Tailscale 1.104.1 (node-level) |
 | Tailnet integration | Tailscale Kubernetes operator 1.102.4 |
+| DNS ad-blocking | AdGuard Home v1.0.0-b.1 (beta) on ashx4 |
 
 ---
 
@@ -161,6 +162,10 @@ keys come from the Bitwarden SSH agent. Original vendor logins (`radxa@ashx1`,
 
 The tailnet API proxy authenticates you as your tailnet identity, which needs an explicit
 RBAC binding in the cluster or every request returns `Forbidden`.
+
+AdGuard Home answers DNS on ashx4: `192.168.0.112:53` (LAN, handed out by the router) and
+`100.76.119.113:53` (tailnet). Its admin UI is tailnet-only: `http://100.76.119.113:8080`.
+The nodes themselves use public DNS, never AdGuard. See `docs/decisions.md` #9.
 
 ---
 

@@ -273,6 +273,34 @@ kubectl uncordon <node>
 
 ---
 
+## AdGuard Home
+
+Runs on ashx4 (`adguard_node`), deployed by the `adguard` role. The setup wizard wrote its
+config; it lives on the node, not in this repo.
+
+```bash
+ansible-playbook -i inventory.yml site.yml --tags adguard -e adguard_enabled=true
+```
+
+**Back up the config** before any upgrade:
+
+```bash
+kubectl -n adguard exec deploy/adguard -- cat /opt/adguardhome/conf/AdGuardHome.yaml \
+  > AdGuardHome-$(date +%F).yaml
+```
+
+**Upgrade:** bump `adguard_version` in `group_vars/all.yml` and re-run the role. It is a
+beta; minor 1.x releases may break compatibility, so read the release notes first.
+
+**ashx4 down = no DNS for home devices.** Point the router's DHCP DNS at a public resolver
+until ashx4 is back. The cluster is unaffected: nodes use `node_dns_servers`.
+
+**Rebuild from scratch:** re-run the role, then run the wizard at
+`http://100.76.119.113:3000` (UI port 80, DNS port 53, all interfaces), or restore the
+backed-up `AdGuardHome.yaml` into `/opt/adguardhome/conf/` and restart the pod.
+
+---
+
 ## Teardown
 
 ```bash

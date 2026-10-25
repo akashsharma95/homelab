@@ -169,6 +169,33 @@ outside the home.
 
 ---
 
+## 9. AdGuard Home on a hostPort, home devices only
+
+**Decision:** one AdGuard Home pod on ashx4, reached on `hostPort` 53. The router hands it
+to home devices. No tailnet-wide DNS override. Cluster nodes pin public DNS.
+
+**Why AdGuard over Blocky.** A web UI and per-client query log were wanted. The cost is a
+stateful pod: the UI writes its own config, so it is one replica on a local-path volume.
+
+**Why hostPort, not a LoadBalancer.** servicelb listens on every node, ashx2's public IP
+included, which risks an open resolver, and it SNATs away client IPs. The Tailscale
+LoadBalancer is not documented to carry UDP. A hostPort on the pinned node serves both its
+LAN and tailnet IP and keeps the real client address.
+
+**Why no tailnet override.** With override on, ashx4 down would break DNS on every tailnet
+device everywhere. A second public nameserver does not help: Tailscale queries all of
+them, so ads leak.
+
+**Why nodes pin public DNS.** Otherwise ashx4 down breaks external DNS for every node and
+pod, and ashx4 depends on itself at boot.
+
+**Beta by choice:** v1.0.0-b.1. Minor 1.x releases may break compatibility.
+
+**Revisit when:** home DNS needs to survive ashx4 being down. That means a second synced
+instance (adguardhome-sync).
+
+---
+
 ## Known risks
 
 **1. Neon free-tier quota — happened, resolved by #8.** The quota that ran out was data
