@@ -201,6 +201,30 @@ an RBAC binding. That error means auth *worked*.
 
 ---
 
+## Tailnet kubectl context slow, `Client.Timeout ... reading body`
+
+**Symptom.** Through the `tailscale-operator` context, every `kubectl apply` prints
+`Unexpected error when reading response body ... Client.Timeout`, then succeeds. Large
+responses crawl: `/openapi/v3/api/v1` (1.6 MB) moved at ~18 KB/s and hit the 60 s timeout.
+Direct contexts return the same body in 0.3 s.
+
+**Cause.** The operator pod's placement. On ashx1 its proxy managed ~18 KB/s, whether
+the tailnet path was DERP or direct, while the pod's own leg to the API server took
+0.13 s. Not root-caused further; ashx1's vendor kernel is the prime suspect.
+
+**Fix.** The operator role sets a required node affinity to `tailscale_operator_nodes`
+(ashx4, ashx5). There it does ~2 MB/s. Measure:
+
+```bash
+curl -s -o /dev/null -w '%{size_download} B in %{time_total}s\n' \
+  https://tailscale-operator.<your-tailnet>.ts.net/openapi/v3/api/v1
+```
+
+Helm 4 server-side apply does not remove a `nodeSelector` key that no field manager
+owns. If an old pin lingers, remove it with `kubectl patch --type=json`.
+
+---
+
 ## Diagnostic patterns worth internalising
 
 **Uniform failure across all nodes usually means a broken test, not a broken cluster.**
