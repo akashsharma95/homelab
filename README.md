@@ -1,6 +1,6 @@
 # homelab
 
-A four-node Kubernetes (k3s) cluster — three servers and one agent — stretched across a home lab and Oracle Cloud,
+A five-node Kubernetes (k3s) cluster — three servers and two agents — stretched across a home lab and Oracle Cloud,
 joined over a Tailscale tailnet, with embedded etcd as the control-plane datastore.
 
 This repo is both the **documentation** of that cluster and the **automation** to rebuild
@@ -35,35 +35,36 @@ it or add a node to it.
                  │                  │                  │
                  └──────────────────┼──────────────────┘
                                     │
-                           ┌────────┴───────┐
-                           │     ashx4      │
-                           │ Radxa Dragon   │
-                           │      Q6A       │
-                           │  agent only    │
-                           │ 100.76.119.113 │
-                           └────────────────┘
+                         ┌──────────┴─────────┐
+                ┌────────┴───────┐   ┌────────┴───────┐
+                │     ashx4      │   │     ashx5      │
+                │ Radxa Dragon   │   │ Radxa Dragon   │
+                │      Q6A       │   │      Q6A       │
+                │  agent only    │   │  agent only    │
+                │ 100.76.119.113 │   │ 100.127.154.50 │
+                └────────────────┘   └────────────────┘
                     flannel VXLAN + etcd peers over tailscale0
                     pods 10.42.0.0/16 · svc 10.43.0.0/16
 ```
 
 **ashx1–3 are control-plane nodes.** Each runs an API server, scheduler,
-controller-manager and an etcd member, and also runs workloads. **ashx4 is an agent**:
-workloads only, no etcd member, so it does not change quorum. See `docs/decisions.md` #3.
+controller-manager and an etcd member, and also runs workloads. **ashx4 and ashx5 are
+agents**: workloads only, no etcd member, so they do not change quorum. See `docs/decisions.md` #3.
 
 ### Node inventory
 
-| | ashx1 | ashx2 | ashx3 | ashx4 |
-|---|---|---|---|---|
-| Hardware | Radxa Cubie A7S | Oracle Ampere A1.Flex | Raspberry Pi 4B | Radxa Dragon Q6A |
-| SoC / arch | Allwinner A733, arm64 | Ampere, arm64 | BCM2711, arm64 | Qualcomm QCM6490, arm64 |
-| OS | Debian 11 (bullseye) | AlmaLinux 10.2 | Debian 13 (trixie) | Ubuntu 24.04 |
-| Kernel | 5.15.147-21-a733 (vendor) | 6.12.0-211.61.1.el10_2 | 6.18.50+rpt-rpi-v8 | 6.18.2-3-qcom (vendor) |
-| CPU / RAM | 8 cores / 8 GB | 4 OCPU / 24 GB | 4 cores / 8 GB | 8 cores / 12 GB |
-| Storage | 238 GB SD card | 46 GB boot + 147 GB volume | 58 GB SD card | 512 GB NVMe |
-| Role | server | server (etcd init) | server | agent |
-| Tailnet IP | 100.86.153.102 | 100.108.19.113 | 100.97.6.117 | 100.76.119.113 |
-| Location | Home (UK) | uk-london-1 | Home (UK) | Home (UK) |
-| Login | `ash` (orig. `radxa`) | `ash` (orig. `opc`) | `ash` | `ash` (orig. `radxa`) |
+| | ashx1 | ashx2 | ashx3 | ashx4 | ashx5 |
+|---|---|---|---|---|---|
+| Hardware | Radxa Cubie A7S | Oracle Ampere A1.Flex | Raspberry Pi 4B | Radxa Dragon Q6A | Radxa Dragon Q6A |
+| SoC / arch | Allwinner A733, arm64 | Ampere, arm64 | BCM2711, arm64 | Qualcomm QCM6490, arm64 | Qualcomm QCM6490, arm64 |
+| OS | Debian 11 (bullseye) | AlmaLinux 10.2 | Debian 13 (trixie) | Ubuntu 24.04 | Ubuntu 24.04 |
+| Kernel | 5.15.147-21-a733 (vendor) | 6.12.0-211.61.1.el10_2 | 6.18.50+rpt-rpi-v8 | 7.0.11-7-qcom (vendor) | 6.18.2-3-qcom (vendor) |
+| CPU / RAM | 8 cores / 8 GB | 4 OCPU / 24 GB | 4 cores / 8 GB | 8 cores / 12 GB | 8 cores / 12 GB |
+| Storage | 238 GB SD card | 46 GB boot + 147 GB volume | 58 GB SD card | 512 GB NVMe | 512 GB NVMe |
+| Role | server | server (etcd init) | server | agent | agent |
+| Tailnet IP | 100.86.153.102 | 100.108.19.113 | 100.97.6.117 | 100.76.119.113 | 100.127.154.50 |
+| Location | Home (UK) | uk-london-1 | Home (UK) | Home (UK) | Home (UK) |
+| Login | `ash` (orig. `radxa`) | `ash` (orig. `opc`) | `ash` | `ash` (orig. `radxa`) | `ash` (orig. `radxa`) |
 
 Latency: ashx1↔ashx3 ~1.5 ms (same LAN), home↔ashx2 ~21 ms.
 

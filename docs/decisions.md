@@ -74,6 +74,7 @@ Keep the server count odd: a fourth member raises quorum to 3 without tolerating
 failures. Add servers in pairs, or add agents instead.
 
 **Update 2026-10:** ashx4 (Radxa Dragon Q6A) joined as the first agent, for this reason.
+ashx5, a second Q6A, joined as another agent.
 
 ---
 

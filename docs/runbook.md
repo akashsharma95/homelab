@@ -71,7 +71,8 @@ Desktop OS images idle-suspend; the `common` role masks the sleep targets. See
 
 A Raspberry Pi needs a reboot for the memory cgroup. The play fails with an explicit
 message rather than continuing into a confusing kubelet failure; pass `-e allow_reboot=true`
-to let it reboot and wait, or reboot yourself and re-run.
+to let it reboot and wait, or reboot yourself and re-run. A Radxa Dragon Q6A
+(`radxa_q6a` group) needs one too, for `rt_group_sched=0`.
 
 **4. Verify — Ready is not enough**
 
@@ -91,7 +92,7 @@ with completely broken service networking.
 kubectl get nodes -o wide
 
 # Service rules on every node — the check that catches silent kube-proxy failure
-for n in ashx1 ashx2 ashx3 ashx4; do
+for n in ashx1 ashx2 ashx3 ashx4 ashx5; do
   echo -n "$n: "; ssh $n 'sudo iptables-save -t nat | grep -c KUBE-SVC'
 done
 

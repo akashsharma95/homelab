@@ -160,6 +160,25 @@ targets on every node. Verify: `systemctl is-enabled suspend.target` prints `mas
 
 ---
 
+## Q6A: k3s-agent fails, kubepods missing cpu controller
+
+**Symptom.** `k3s-agent` crash-loops with `cgroup ["kubepods"] has some missing
+controllers: cpu`. `/sys/fs/cgroup/cgroup.controllers` lists `cpu`, but
+`cgroup.subtree_control` does not, and `echo +cpu` into it returns `Invalid argument`.
+Intermittent: the agent can start in a lucky window, then fail on the next restart.
+
+**Cause.** The vendor kernel has `CONFIG_RT_GROUP_SCHED=y`. With it, cgroup v2 will not
+enable `cpu` while any real-time thread sits in a child cgroup. The GDM greeter's session
+holds several: pipewire (via rtkit) and gnome-shell's KMS thread. ashx4 escaped only
+because its greeter kept crashing.
+
+**Fix.** The `prereqs_q6a` role appends `rt_group_sched=0` to `/etc/kernel/cmdline`,
+regenerates boot entries (`u-boot-update`, `kernel-install add`) and reboots. The GUI
+stays; real-time threads keep their priority but are no longer budgeted per cgroup.
+Verify: `grep rt_group_sched=0 /proc/cmdline`, then restart `k3s-agent` a few times.
+
+---
+
 ## Tailscale operator pod runs but does nothing
 
 **Symptom.** Operator pod `Running`, no device appears in the tailnet, logs empty or
