@@ -101,7 +101,7 @@ kubectl get nodes -o custom-columns=\
 'NODE:.metadata.name,FLANNEL-IP:.metadata.annotations.flannel\.alpha\.coreos\.com/public-ip'
 
 # etcd: every node lists the etcd role, and the API server sees etcd as healthy
-kubectl get nodes          # ROLES: control-plane,etcd on all three
+kubectl get nodes          # ROLES: control-plane,etcd on all five
 ssh ashx2 'sudo k3s kubectl get --raw "/readyz?verbose"' | grep etcd
 ```
 
@@ -143,10 +143,10 @@ Restore (from the [k3s docs](https://docs.k3s.io/cli/etcd-snapshot)) — the who
 goes back to the snapshot:
 
 ```bash
-for n in ashx1 ashx2 ashx3; do ssh $n 'sudo systemctl stop k3s'; done
+for n in ashx1 ashx2 ashx3 ashx4 ashx5; do ssh $n 'sudo systemctl stop k3s'; done
 ssh ashx2 'sudo k3s server --cluster-reset --cluster-reset-restore-path=<SNAPSHOT>'
 ssh ashx2 'sudo systemctl start k3s'
-for n in ashx1 ashx3; do ssh $n 'sudo rm -rf /var/lib/rancher/k3s/server/db && sudo systemctl start k3s'; done
+for n in ashx1 ashx3 ashx4 ashx5; do ssh $n 'sudo rm -rf /var/lib/rancher/k3s/server/db && sudo systemctl start k3s'; done
 ```
 
 **Quorum lost and not coming back** (e.g. home is down for good): `--cluster-reset`
@@ -239,16 +239,16 @@ follow "Replace a failed server" — it does not simply rejoin.
 ## Emergency: cluster unreachable
 
 **Symptom: `kubectl` fails everywhere.**
-Likely lost etcd quorum: two of three servers are down or cannot reach each other. A home
+Likely lost etcd quorum: three of five servers are down or cannot reach each other. A home
 outage does exactly this. Check which servers are up and can reach each other over the
 tailnet:
 
 ```bash
-for n in ashx1 ashx2 ashx3; do ssh $n 'systemctl is-active k3s; tailscale status | head -4'; done
+for n in ashx1 ashx2 ashx3 ashx4 ashx5; do ssh $n 'systemctl is-active k3s; tailscale status | head -4'; done
 ssh ashx2 'sudo journalctl -u k3s -n 50 | grep -i etcd'
 ```
 
-Bringing the second member back restores quorum. If it cannot come back, see "etcd
+Bringing members back until three are up restores quorum. If it cannot come back, see "etcd
 snapshots and restore".
 
 Running workloads keep serving traffic while the control plane is down. You lose the

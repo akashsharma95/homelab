@@ -74,7 +74,10 @@ Keep the server count odd: a fourth member raises quorum to 3 without tolerating
 failures. Add servers in pairs, or add agents instead.
 
 **Update 2026-10:** ashx4 (Radxa Dragon Q6A) joined as the first agent, for this reason.
-ashx5, a second Q6A, joined as another agent.
+
+**Update 2026-10-25:** ashx5, a second Q6A, made a pair, so both were promoted: 5 servers,
+quorum 3 of 5, tolerates two failures. Both have NVMe, which takes the SD cards off the
+etcd write path. It does not help a home outage: four of five members are at home.
 
 ---
 
@@ -161,6 +164,8 @@ secrets and one ClusterRoleBinding, which were backed up and restored by hand.
 
 **Revisit when:** ashx1 and ashx3 boot from USB3 SSDs, or a fourth site gives a quorum
 outside the home.
+
+**Update 2026-10-25:** 5 members, after ashx4 and ashx5 were promoted. See #3.
 
 ---
 

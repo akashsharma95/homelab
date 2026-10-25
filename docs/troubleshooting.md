@@ -23,7 +23,7 @@ kubectl exec POD_A -- nslookup kubernetes.default.svc.cluster.local
 kubectl exec POD_A -- wget -qO- http://SOME_SERVICE.default.svc.cluster.local/
 
 # Fastest single indicator, per node — all nodes should be non-zero and similar
-for n in ashx1 ashx2 ashx3; do
+for n in ashx1 ashx2 ashx3 ashx4 ashx5; do
   echo -n "$n: "; ssh $n 'sudo iptables-save -t nat | grep -c KUBE-SVC'
 done
 ```
@@ -160,12 +160,12 @@ targets on every node. Verify: `systemctl is-enabled suspend.target` prints `mas
 
 ---
 
-## Q6A: k3s-agent fails, kubepods missing cpu controller
+## Q6A: kubelet fails, kubepods missing cpu controller
 
-**Symptom.** `k3s-agent` crash-loops with `cgroup ["kubepods"] has some missing
+**Symptom.** `k3s` (or `k3s-agent`) crash-loops with `cgroup ["kubepods"] has some missing
 controllers: cpu`. `/sys/fs/cgroup/cgroup.controllers` lists `cpu`, but
 `cgroup.subtree_control` does not, and `echo +cpu` into it returns `Invalid argument`.
-Intermittent: the agent can start in a lucky window, then fail on the next restart.
+Intermittent: k3s can start in a lucky window, then fail on the next restart.
 
 **Cause.** The vendor kernel has `CONFIG_RT_GROUP_SCHED=y`. With it, cgroup v2 will not
 enable `cpu` while any real-time thread sits in a child cgroup. The GDM greeter's session
@@ -175,7 +175,7 @@ because its greeter kept crashing.
 **Fix.** The `prereqs_q6a` role appends `rt_group_sched=0` to `/etc/kernel/cmdline`,
 regenerates boot entries (`u-boot-update`, `kernel-install add`) and reboots. The GUI
 stays; real-time threads keep their priority but are no longer budgeted per cgroup.
-Verify: `grep rt_group_sched=0 /proc/cmdline`, then restart `k3s-agent` a few times.
+Verify: `grep rt_group_sched=0 /proc/cmdline`, then restart k3s a few times.
 
 ---
 

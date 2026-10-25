@@ -1,6 +1,6 @@
 # homelab
 
-A five-node Kubernetes (k3s) cluster — three servers and two agents — stretched across a home lab and Oracle Cloud,
+A five-node Kubernetes (k3s) cluster — all five servers — stretched across a home lab and Oracle Cloud,
 joined over a Tailscale tailnet, with embedded etcd as the control-plane datastore.
 
 This repo is both the **documentation** of that cluster and the **automation** to rebuild
@@ -40,16 +40,16 @@ it or add a node to it.
                 │     ashx4      │   │     ashx5      │
                 │ Radxa Dragon   │   │ Radxa Dragon   │
                 │      Q6A       │   │      Q6A       │
-                │  agent only    │   │  agent only    │
+                │ control-plane  │   │ control-plane  │
+                │ + etcd member  │   │ + etcd member  │
                 │ 100.76.119.113 │   │ 100.127.154.50 │
                 └────────────────┘   └────────────────┘
                     flannel VXLAN + etcd peers over tailscale0
                     pods 10.42.0.0/16 · svc 10.43.0.0/16
 ```
 
-**ashx1–3 are control-plane nodes.** Each runs an API server, scheduler,
-controller-manager and an etcd member, and also runs workloads. **ashx4 and ashx5 are
-agents**: workloads only, no etcd member, so they do not change quorum. See `docs/decisions.md` #3.
+**All five are control-plane nodes.** Each runs an API server, scheduler,
+controller-manager and an etcd member, and also runs workloads. See `docs/decisions.md` #3.
 
 ### Node inventory
 
@@ -58,10 +58,10 @@ agents**: workloads only, no etcd member, so they do not change quorum. See `doc
 | Hardware | Radxa Cubie A7S | Oracle Ampere A1.Flex | Raspberry Pi 4B | Radxa Dragon Q6A | Radxa Dragon Q6A |
 | SoC / arch | Allwinner A733, arm64 | Ampere, arm64 | BCM2711, arm64 | Qualcomm QCM6490, arm64 | Qualcomm QCM6490, arm64 |
 | OS | Debian 11 (bullseye) | AlmaLinux 10.2 | Debian 13 (trixie) | Ubuntu 24.04 | Ubuntu 24.04 |
-| Kernel | 5.15.147-21-a733 (vendor) | 6.12.0-211.61.1.el10_2 | 6.18.50+rpt-rpi-v8 | 7.0.11-7-qcom (vendor) | 6.18.2-3-qcom (vendor) |
+| Kernel | 5.15.147-21-a733 (vendor) | 6.12.0-211.61.1.el10_2 | 6.18.50+rpt-rpi-v8 | 7.0.11-7-qcom (vendor) | 7.0.11-7-qcom (vendor) |
 | CPU / RAM | 8 cores / 8 GB | 4 OCPU / 24 GB | 4 cores / 8 GB | 8 cores / 12 GB | 8 cores / 12 GB |
 | Storage | 238 GB SD card | 46 GB boot + 147 GB volume | 58 GB SD card | 512 GB NVMe | 512 GB NVMe |
-| Role | server | server (etcd init) | server | agent | agent |
+| Role | server | server (etcd init) | server | server | server |
 | Tailnet IP | 100.86.153.102 | 100.108.19.113 | 100.97.6.117 | 100.76.119.113 | 100.127.154.50 |
 | Location | Home (UK) | uk-london-1 | Home (UK) | Home (UK) | Home (UK) |
 | Login | `ash` (orig. `radxa`) | `ash` (orig. `opc`) | `ash` | `ash` (orig. `radxa`) | `ash` (orig. `radxa`) |
@@ -73,7 +73,7 @@ Latency: ashx1↔ashx3 ~1.5 ms (same LAN), home↔ashx2 ~21 ms.
 | Component | Version / choice |
 |---|---|
 | Kubernetes | k3s v1.37.1+k3s1 |
-| Datastore | embedded etcd, 3 members |
+| Datastore | embedded etcd, 5 members |
 | CNI | flannel, VXLAN backend, bound to `tailscale0` |
 | Ingress | Traefik (k3s default) |
 | Storage | local-path provisioner |
@@ -104,19 +104,21 @@ k3s manage `tailscaled` and advertise the pod CIDR as a tailnet route, which req
 
 ### Control plane: embedded etcd
 
-Each server runs an etcd member. ashx2 initialises the cluster (`cluster-init`); ashx1
-and ashx3 join it. Until 2026-10 the datastore was an external Neon Postgres via kine;
+Each server runs an etcd member. ashx2 initialises the cluster (`cluster-init`); the
+others join it. Until 2026-10 the datastore was an external Neon Postgres via kine;
 it was replaced after Neon's free-tier transfer quota cut off all new connections. See
 `docs/decisions.md` #8.
 
 Consequences you must understand:
 
-- **Quorum is 2 of 3.** Any one node can fail and the cluster keeps working.
-- **Two of the three members are at home.** A home outage leaves ashx2 alone, without
+- **Quorum is 3 of 5.** Any two nodes can fail and the cluster keeps working.
+- **Four of the five members are at home.** A home outage leaves ashx2 alone, without
   quorum: the API stops everywhere. An Oracle outage is survivable. The old external
   datastore survived both; this is the accepted cost of dropping it.
 - **etcd fsyncs continuously to SD cards** on ashx1 and ashx3. That is slow (ashx3 failed
-  etcd's fsync benchmark) and wears the cards. See `docs/decisions.md` known risks.
+  etcd's fsync benchmark) and wears the cards. ashx4 and ashx5 (NVMe) plus any one other
+  member can form quorum, so the cards are no longer on every write's critical path. See
+  `docs/decisions.md` known risks.
 - Running workloads keep serving traffic without quorum; you just cannot schedule or
   change anything.
 
