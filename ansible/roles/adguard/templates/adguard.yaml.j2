@@ -1,0 +1,57 @@
+# Managed by Ansible. Rendered from roles/adguard/templates/adguard.yaml.j2
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: adguard
+---
+# local-path: the volume lives on {{ adguard_node }}, which pins the pod there.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: adguard-data
+  namespace: adguard
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adguard
+  namespace: adguard
+spec:
+  replicas: 1
+  # hostPorts and an RWO volume cannot be held by two pods at once.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: adguard
+  template:
+    metadata:
+      labels:
+        app: adguard
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: {{ adguard_node }}
+      containers:
+        - name: adguard
+          image: docker.io/adguard/adguardhome:{{ adguard_version }}
+          # hostPort, not a LoadBalancer: servicelb would listen on every node, ashx2's
+          # public IP included, and SNAT away the client IPs. See docs/decisions.md #9.
+          ports:
+            - {name: dns-udp, containerPort: 53, hostPort: 53, protocol: UDP}
+            - {name: dns-tcp, containerPort: 53, hostPort: 53, protocol: TCP}
+            # UI on the tailnet only. 80 is taken by Traefik's servicelb on every node.
+            - {name: setup, containerPort: 3000, hostPort: 3000, hostIP: "{{ hostvars[adguard_node].node_ip }}", protocol: TCP}
+            - {name: http, containerPort: 80, hostPort: 8080, hostIP: "{{ hostvars[adguard_node].node_ip }}", protocol: TCP}
+          volumeMounts:
+            - {name: data, mountPath: /opt/adguardhome/conf, subPath: conf}
+            - {name: data, mountPath: /opt/adguardhome/work, subPath: work}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: adguard-data

@@ -24,6 +24,11 @@ allow_reboot: false
 helm_version: "v4.3.0"
 helm_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
 
+adguard_enabled: false
+# Beta by choice; minor 1.x releases may break compatibility. Back up conf before bumping.
+adguard_version: v1.0.0-b.1
+adguard_node: ashx4
+
 tailscale_operator_enabled: false
 tailscale_operator_chart_version: "1.102.4"
 tailscale_operator_namespace: tailscale

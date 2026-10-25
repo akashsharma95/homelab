@@ -1,0 +1,47 @@
+---
+- name: Render the AdGuard manifest
+  ansible.builtin.template:
+    src: adguard.yaml.j2
+    dest: /usr/local/share/adguard.yaml
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Apply the AdGuard manifest
+  ansible.builtin.command: /usr/local/bin/k3s kubectl apply -f /usr/local/share/adguard.yaml
+  register: adguard_apply
+  changed_when: "' created' in adguard_apply.stdout or ' configured' in adguard_apply.stdout"
+
+- name: Wait for AdGuard to roll out
+  ansible.builtin.command: /usr/local/bin/k3s kubectl -n adguard rollout status deploy/adguard --timeout=300s
+  changed_when: false
+
+# The setup wizard writes this file; until then AdGuard serves only the wizard.
+- name: Check whether setup has been completed
+  ansible.builtin.command: >-
+    /usr/local/bin/k3s kubectl -n adguard exec deploy/adguard --
+    test -f /opt/adguardhome/conf/AdGuardHome.yaml
+  register: adguard_configured
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Point at the setup wizard
+  ansible.builtin.debug:
+    msg: >-
+      AdGuard is not set up yet. Run the wizard at
+      http://{{ hostvars[adguard_node].node_ip }}:3000 (admin UI port 80, DNS port 53,
+      all interfaces), then re-run this role to verify DNS.
+  when: adguard_configured.rc != 0
+
+# From the control machine: it is on the tailnet by definition, and has dig.
+- name: Verify DNS answers on the tailnet IP
+  ansible.builtin.command: >-
+    dig +short +time=2 +tries=3 @{{ hostvars[adguard_node].node_ip }} example.com
+  delegate_to: localhost
+  become: false
+  register: adguard_dig
+  changed_when: false
+  check_mode: false
+  failed_when: adguard_dig.rc != 0 or (adguard_dig.stdout | trim | length) == 0
+  when: adguard_configured.rc == 0

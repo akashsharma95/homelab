@@ -64,3 +64,11 @@
     - role: tailscale_operator
       when: tailscale_operator_enabled | bool
       tags: [operator]
+
+- name: AdGuard Home
+  hosts: k3s_servers[0]
+  become: true
+  roles:
+    - role: adguard
+      when: adguard_enabled | bool
+      tags: [adguard]
