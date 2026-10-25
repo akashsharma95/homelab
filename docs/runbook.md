@@ -279,7 +279,7 @@ Runs on ashx4 (`adguard_node`), deployed by the `adguard` role. The setup wizard
 config; it lives on the node, not in this repo.
 
 ```bash
-ansible-playbook -i inventory.yml site.yml --tags adguard -e adguard_enabled=true
+ansible-playbook -i inventory.yml site.yml --tags adguard
 ```
 
 **Back up the config** before any upgrade:
