@@ -21,12 +21,12 @@ all:
           node_ip: 100.97.6.117
         ashx4:
           node_ip: 100.76.119.113
+        ashx5:
+          node_ip: 100.127.154.50
 
     # Workers only: no etcd member, so they do not change quorum. See docs/decisions.md #3.
     k3s_agents:
-      hosts:
-        ashx5:
-          node_ip: 100.127.154.50
+      hosts: {}
 
     rpi:
       hosts:
