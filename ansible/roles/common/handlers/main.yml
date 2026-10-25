@@ -1,0 +1,6 @@
+---
+# reapply, not "connection up": keeps the DHCP lease and the link up.
+- name: Reapply the network connection
+  ansible.builtin.command:
+    argv: [nmcli, device, reapply, "{{ common_nm_default.stdout_lines[0] }}"]
+  changed_when: true

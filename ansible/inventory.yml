@@ -41,6 +41,16 @@ all:
         ashx4:
         ashx5:
 
+    # Router DHCP hands out AdGuard (ashx4). Nodes must not depend on a workload for DNS.
+    home:
+      vars:
+        node_dns_servers: [1.1.1.1, 9.9.9.9]
+      hosts:
+        ashx1:
+        ashx3:
+        ashx4:
+        ashx5:
+
     almalinux:
       hosts:
         ashx2:

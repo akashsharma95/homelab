@@ -62,3 +62,44 @@
     - suspend.target
     - hibernate.target
     - hybrid-sleep.target
+
+# Tailscale's 100.100.100.100 forwards to these, so they become the node's upstream DNS.
+- name: Find the default-route NetworkManager connection
+  ansible.builtin.shell: |
+    set -o pipefail
+    dev=$(ip -4 route show default | awk '{print $5; exit}')
+    echo "$dev"
+    nmcli -g GENERAL.CONNECTION device show "$dev"
+  args:
+    executable: /bin/bash
+  register: common_nm_default
+  changed_when: false
+  check_mode: false
+  when: node_dns_servers is defined
+
+- name: Read the connection's DNS settings
+  ansible.builtin.command:
+    argv: [nmcli, -g, "ipv4.ignore-auto-dns,ipv4.dns,ipv6.ignore-auto-dns", connection, show, "{{ common_nm_default.stdout_lines[1] }}"]
+  register: common_nm_dns
+  changed_when: false
+  check_mode: false
+  when: node_dns_servers is defined
+
+- name: Pin DNS to public resolvers
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - connection
+      - modify
+      - "{{ common_nm_default.stdout_lines[1] }}"
+      - ipv4.ignore-auto-dns
+      - "yes"
+      - ipv4.dns
+      - "{{ node_dns_servers | join(',') }}"
+      - ipv6.ignore-auto-dns
+      - "yes"
+  when:
+    - node_dns_servers is defined
+    - common_nm_dns.stdout_lines != ['yes', node_dns_servers | join(','), 'yes']
+  changed_when: true
+  notify: Reapply the network connection
