@@ -25,6 +25,8 @@ all:
       hosts:
         ashx4:
           node_ip: 100.76.119.113
+        ashx5:
+          node_ip: 100.127.154.50
 
     rpi:
       hosts:
@@ -43,3 +45,4 @@ all:
         ashx1:
         ashx3:
         ashx4:
+        ashx5:
