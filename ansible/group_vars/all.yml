@@ -27,5 +27,8 @@ helm_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
 tailscale_operator_enabled: false
 tailscale_operator_chart_version: "1.102.4"
 tailscale_operator_namespace: tailscale
+# On ashx1 the operator's tailnet proxy ran at ~18 KB/s; on a Q6A it does ~2 MB/s.
+# See docs/troubleshooting.md.
+tailscale_operator_nodes: [ashx4, ashx5]
 tailscale_oauth_client_id: "{{ lookup('env', 'TS_OAUTH_CLIENT_ID') }}"
 tailscale_oauth_client_secret: "{{ lookup('env', 'TS_OAUTH_CLIENT_SECRET') }}"

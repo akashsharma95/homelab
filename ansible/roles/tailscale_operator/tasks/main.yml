@@ -80,9 +80,19 @@
     --namespace {{ tailscale_operator_namespace }}
     --version {{ tailscale_operator_chart_version }}
     --set-string apiServerProxyConfig.mode="true"
+    --set-json 'operatorConfig.affinity={{ tailscale_operator_affinity | to_json }}'
     --wait --timeout 10m
   environment:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  vars:
+    tailscale_operator_affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: In
+                  values: "{{ tailscale_operator_nodes }}"
   register: tailscale_operator_helm
   changed_when: "'has been upgraded' in tailscale_operator_helm.stdout or 'has been installed' in tailscale_operator_helm.stdout"
 
